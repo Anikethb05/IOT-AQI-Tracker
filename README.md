@@ -12,6 +12,7 @@ The system fetches IoT sensor data (Temperature, Humidity, Dust Density, AQI, et
 - **Firebase Web App:** [https://iot-airquality-tracker.web.app](https://iot-airquality-tracker.web.app)  
 - **Realtime Database:** [https://iot-airquality-tracker-default-rtdb.firebaseio.com](https://iot-airquality-tracker-default-rtdb.firebaseio.com)  
 - **GitHub Repository:** [https://github.com/Aniketh05/IOT-AQI-Tracker](https://github.com/Anikethb05/IOT-AQI-Tracker/)
+- **Thingspeak monitors and data analysis:** [https://thingspeak.mathworks.com/channels/3143647/private_show](https://thingspeak.mathworks.com/channels/3143647/private_show)
 
 
 ---
@@ -25,6 +26,7 @@ The system fetches IoT sensor data (Temperature, Humidity, Dust Density, AQI, et
 - 🧭 Dynamic marker updates with AQI color indicators  
 
 ---
+
 
 
 
