@@ -9,7 +9,7 @@ The system fetches IoT sensor data (Temperature, Humidity, Dust Density, AQI, et
 
 ## 🚀 Deployment Links
 
-- **Firebase Web App:** [https://iot-air-quality-monitor.web.app](https://iot-air-quality-monitor.web.app)  
+- **Firebase Web App:** [https://iot-air-quality-monitor.web.app](https://iot-airquality-tracker.web.app)  
 - **Realtime Database:** [https://iot-air-quality-monitor-default-rtdb.firebaseio.com](https://iot-air-quality-monitor-default-rtdb.firebaseio.com)  
 - **GitHub Repository:** [https://github.com/Aniketh05/IOT-AQI-Tracker](https://github.com/Anikethb05/IOT-AQI-Tracker/)
 
@@ -25,4 +25,5 @@ The system fetches IoT sensor data (Temperature, Humidity, Dust Density, AQI, et
 - 🧭 Dynamic marker updates with AQI color indicators  
 
 ---
+
 
