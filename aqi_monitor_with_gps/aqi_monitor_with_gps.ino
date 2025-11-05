@@ -3,20 +3,18 @@
 #include <HTTPClient.h>
 #include "aqi_model.h"
 #include <FirebaseESP32.h>
-// #include <TinyGPS++.h>   // Uncomment when GPS module is connected
 
 // --------------------- WiFi Configuration ---------------------
-const char* ssid = "duckietown";           
-const char* password = "quackquack";       
+const char* ssid = "duckietown";
+const char* password = "quackquack";
 
 // --------------------- ThingSpeak Configuration ---------------------
 const char* server = "http://api.thingspeak.com/update";
-String apiKey = "WSKSWKXXNMW4YXGR";     
+String apiKey = "WSKSWKXXNMW4YXGR";
 
 // --------------------- Firebase Configuration ---------------------
 #define FIREBASE_HOST "iot-airquality-tracker-default-rtdb.firebaseio.com"
-#define FIREBASE_AUTH "rLDg5qZg8X8CaxSepd0SqppyE5u2OVhxGloDHZRm"  // Replace with your Firebase Database secret
-
+#define FIREBASE_AUTH "rLDg5qZg8X8CaxSepd0SqppyE5u2OVhxGloDHZRm"
 
 FirebaseConfig config;
 FirebaseAuth auth;
@@ -42,11 +40,14 @@ DHT dht22(DHT22_PIN, DHT22);
 float latitude = 12.9716;    // Bangalore
 float longitude = 77.5946;   // Bangalore
 
-// --------------------- ThingSpeak Timing ---------------------
+// --------------------- Timing ---------------------
 unsigned long lastUpdate = 0;
-const unsigned long updateInterval = 15000; // 15 seconds minimum
+const unsigned long updateInterval = 15000; // 15 seconds
 
-// --------------------- ML Model Functions ---------------------
+// --------------------- Device Info ---------------------
+String deviceId;
+
+// --------------------- AQI Prediction Model ---------------------
 float predictAQI(float humidity, float temperature, float pollutant, float dust) {
   float norm_humi = (humidity - 50.5) / (92.92 - 50.5);
   float norm_temp = (temperature - 18.18) / (33.33 - 18.18);
@@ -154,7 +155,7 @@ void sendToThingSpeak(float temp, float humi, float pollutant, float dust, float
   }
 }
 
-// --------------------- Firebase Upload ---------------------
+// --------------------- Firebase Upload (MULTI-DEVICE) ---------------------
 void sendToFirebase(float temp, float humi, float pollutant, float dust, float aqi) {
   if (WiFi.status() == WL_CONNECTED) {
     FirebaseJson json;
@@ -169,13 +170,19 @@ void sendToFirebase(float temp, float humi, float pollutant, float dust, float a
     json.add("Latitude", latitude);
     json.add("Longitude", longitude);
     json.add("Status", "Active");
+    json.add("DeviceID", deviceId);
+    json.add("Timestamp", millis());
 
-    if (Firebase.pushJSON(fbdo, "/SensorData", json)) {
-      Serial.println("🔥 Firebase: ✓ Data sent successfully!");
+    String path = String("/SensorData/") + deviceId;
+
+    if (Firebase.setJSON(fbdo, path.c_str(), json)) {
+      Serial.println("🔥 Firebase: ✓ Device data written successfully!");
     } else {
       Serial.print("🔥 Firebase error: ");
       Serial.println(fbdo.errorReason());
     }
+  } else {
+    Serial.println("✖ WiFi not connected — cannot write to Firebase.");
   }
 }
 
@@ -184,25 +191,26 @@ void setup() {
   Serial.begin(9600);
   dht22.begin();
   pinMode(ledPower, OUTPUT);
-  
-  Serial.println("\n\n");
-  Serial.println("╔════════════════════════════════════════╗");
-  Serial.println("║   AQI MONITORING SYSTEM - ESP32        ║");
-  Serial.println("║   With ThingSpeak + Firebase Integration║");
-  Serial.println("╚════════════════════════════════════════╝");
-  
-  connectWiFi();
-  
-  // In your code, replace the Firebase configuration section:
 
-  config.api_key = "AIzaSyCyhipBxAUBmnBIkBPYXPKK9VH5S4lG2H4";  // From Firebase Console → Project Settings
+  Serial.println("\n\n╔════════════════════════════════════════╗");
+  Serial.println("║     AQI MONITORING SYSTEM - ESP32       ║");
+  Serial.println("║ ThingSpeak + Firebase (Multi-Device)    ║");
+  Serial.println("╚════════════════════════════════════════╝");
+
+  connectWiFi();
+
+  // Unique device ID (based on MAC)
+  deviceId = WiFi.macAddress();
+  deviceId.replace(":", "");
+  Serial.print("Device ID: ");
+  Serial.println(deviceId);
+
+  config.api_key = "AIzaSyCyhipBxAUBmnBIkBPYXPKK9VH5S4lG2H4";
   config.database_url = FIREBASE_HOST;
 
-  // Enable anonymous sign-in
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  // Sign in anonymously
   if (Firebase.signUp(&config, &auth, "", "")) {
     Serial.println("✓ Firebase anonymous auth successful!");
   } else {
@@ -210,15 +218,12 @@ void setup() {
   }
 
   Serial.println("✓ Firebase initialized successfully!\n");
-
   Serial.println("Initializing sensors...");
   delay(1000);
-  Serial.println("✓ DHT22 Temperature & Humidity sensor ready");
-  Serial.println("✓ MQ-135 Air quality sensor ready");
+  Serial.println("✓ DHT22 sensor ready");
+  Serial.println("✓ MQ-135 sensor ready");
   Serial.println("✓ Dust sensor ready");
-  Serial.println("✓ AQI Prediction Model loaded");
-  
-  Serial.println("\nSystem ready! Starting measurements...\n");
+  Serial.println("✓ AQI Prediction Model loaded\n");
   delay(2000);
 }
 
@@ -244,23 +249,22 @@ void loop() {
     Serial.println("Failed to read from DHT22 sensor!");
   } else {
     Serial.println("\n╔════════════════════════════════════════╗");
-    Serial.println("║          SENSOR READINGS               ║");
+    Serial.println("║            SENSOR READINGS              ║");
     Serial.println("╚════════════════════════════════════════╝");
     
     Serial.print("Humidity: "); Serial.print(humi); Serial.print("%  |  ");
-    Serial.print("Temperature: "); Serial.print(tempC); Serial.print("°C  ~  ");
-    Serial.print(tempF); Serial.print("°F  |  ");
+    Serial.print("Temperature: "); Serial.print(tempC); Serial.print("°C  |  ");
     Serial.print("Pollutant: "); Serial.print(pollutant); Serial.print("  |  ");
     Serial.print("Dust Density: "); Serial.println(dustDensity);
 
     float predicted_aqi = predictAQI(humi, tempC, pollutant, dustDensity);
     
     Serial.println("\n╔════════════════════════════════════════╗");
-    Serial.println("║         ML AQI PREDICTION              ║");
+    Serial.println("║          ML AQI PREDICTION             ║");
     Serial.println("╚════════════════════════════════════════╝");
     
     Serial.print("🎯 Predicted AQI: "); Serial.println(predicted_aqi, 1);
-    Serial.print("📊 Category: "); Serial.print(getAQICategory(predicted_aqi)); 
+    Serial.print("📊 Category: "); Serial.print(getAQICategory(predicted_aqi));
     Serial.print(" ("); Serial.print(getAQIColor(predicted_aqi)); Serial.println(")");
     Serial.print("💡 Advice: "); Serial.println(getHealthAdvice(predicted_aqi));
 
@@ -271,7 +275,7 @@ void loop() {
 
     if (millis() - lastUpdate >= updateInterval) {
       Serial.println("\n╔════════════════════════════════════════╗");
-      Serial.println("║       CLOUD UPLOAD                     ║");
+      Serial.println("║             CLOUD UPLOAD               ║");
       Serial.println("╚════════════════════════════════════════╝");
       
       sendToThingSpeak(tempC, humi, pollutant, dustDensity, predicted_aqi);
@@ -295,10 +299,8 @@ TO ENABLE GPS LATER:
 -------------------------------------------
 #include <TinyGPS++.h>
 TinyGPSPlus gps;
-
 HardwareSerial SerialGPS(1);
 SerialGPS.begin(9600, SERIAL_8N1, RXPin, TXPin);
-
 while (SerialGPS.available() > 0)
   if (gps.encode(SerialGPS.read())) {
     if (gps.location.isValid()) {

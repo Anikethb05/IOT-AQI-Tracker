@@ -1,14 +1,12 @@
-// Import Firebase modular SDK
+// Import Firebase (modular SDK)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import {
   getDatabase,
   ref,
-  query,
-  limitToLast,
-  onChildAdded,
+  onValue
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-// Firebase config
+// --- 🔥 Firebase Config ---
 const firebaseConfig = {
   apiKey: "AIzaSyCyhipBxAUBmnBIkBPYXPKK9VH5S4lG2H4",
   authDomain: "iot-airquality-tracker.firebaseapp.com",
@@ -16,76 +14,76 @@ const firebaseConfig = {
   projectId: "iot-airquality-tracker",
   storageBucket: "iot-airquality-tracker.firebasestorage.app",
   messagingSenderId: "306383675937",
-  appId: "1:306383675937:web:dcf49e994c01b6e68bb960",
+  appId: "1:306383675937:web:dcf49e994c01b6e68bb960"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-const sensorRef = query(ref(db, "SensorData"), limitToLast(1));
 
-// Leaflet map setup
+// --- 🌍 Leaflet Map Setup ---
 const map = L.map("map").setView([12.9716, 77.5946], 12);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "&copy; OpenStreetMap contributors",
+  attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-let marker;
+// Marker storage
+let markers = {};
 
-// Function to get color based on AQI value
+// --- 🧩 Helper: AQI → Color ---
 function getAQIColor(aqi) {
-  if (aqi <= 50) return "#00e400"; // Green
-  if (aqi <= 100) return "#ffff00"; // Yellow
-  if (aqi <= 150) return "#ff7e00"; // Orange
-  if (aqi <= 200) return "#ff0000"; // Red
-  if (aqi <= 300) return "#8f3f97"; // Purple
-  return "#7e0023"; // Maroon
+  if (aqi <= 50) return "green";
+  if (aqi <= 100) return "yellow";
+  if (aqi <= 150) return "orange";
+  if (aqi <= 200) return "red";
+  if (aqi <= 300) return "purple";
+  return "maroon";
 }
 
-// Listen for latest sensor data
-onChildAdded(sensorRef, (snapshot) => {
-  const data = snapshot.val();
-  if (!data) {
-    console.warn("No data received!");
-    return;
-  }
+// --- 🔁 Realtime Listener ---
+onValue(ref(db, "SensorData"), (snapshot) => {
+  const allData = snapshot.val();
+  if (!allData) return;
 
-  console.log("Received data:", data);
+  let latest = null;
 
-  // Update dashboard
-  document.getElementById("temp").textContent =
-    data.Temperature?.toFixed?.(1) ?? "--";
-  document.getElementById("humi").textContent =
-    data.Humidity?.toFixed?.(1) ?? "--";
-  document.getElementById("dust").textContent =
-    data.DustDensity?.toFixed?.(2) ?? "--";
-  document.getElementById("aqi").textContent =
-    data.PredictedAQI?.toFixed?.(1) ?? "--";
-  document.getElementById("timestamp").textContent = new Date().toLocaleString();
+  Object.keys(allData).forEach((key) => {
+    const data = allData[key];
+    const { Latitude, Longitude, PredictedAQI, Category, Advice, DustDensity, Humidity, Temperature, Color } = data;
 
-  // Update map marker
-  if (data.Latitude && data.Longitude) {
-    if (marker) map.removeLayer(marker);
+    // --- 🗺️ Map Marker ---
+    if (Latitude && Longitude) {
+      const color = getAQIColor(PredictedAQI);
+      const icon = L.divIcon({
+        className: "custom-marker",
+        html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid #fff;"></div>`
+      });
 
-    const color = getAQIColor(data.PredictedAQI ?? 0);
+      if (markers[key]) map.removeLayer(markers[key]);
+      markers[key] = L.marker([Latitude, Longitude], { icon })
+        .addTo(map)
+        .bindPopup(
+          `<b>Category:</b> ${Category}<br>
+           <b>AQI:</b> ${PredictedAQI.toFixed(1)}<br>
+           <b>Temp:</b> ${Temperature} °C<br>
+           <b>Dust:</b> ${DustDensity} µg/m³<br>
+           <b>Humidity:</b> ${Humidity}%<br>
+           <b>Advice:</b> ${Advice}`
+        );
+    }
 
-    const icon = L.divIcon({
-      className: "aqi-marker",
-      html: `<div style="background:${color}" class="aqi-marker"></div>`,
-      iconSize: [20, 20],
-    });
+    // Pick the most recent data (for dashboard)
+    latest = data;
+  });
 
-    marker = L.marker([data.Latitude, data.Longitude], { icon })
-      .addTo(map)
-      .bindPopup(
-        `<b>Category:</b> ${data.Category}<br>
-         <b>Dust Density:</b> ${data.DustDensity} µg/m³<br>
-         <b>Humidity:</b> ${data.Humidity}%<br>
-         <b>Predicted AQI:</b> ${data.PredictedAQI}<br>
-         <b>Advice:</b> ${data.Advice}`
-      )
-      .openPopup();
-
-    map.setView([data.Latitude, data.Longitude], 13);
+  // --- 🧾 Dashboard Update ---
+  if (latest) {
+    document.getElementById("temp").textContent = latest.Temperature ?? "--";
+    document.getElementById("humi").textContent = latest.Humidity ?? "--";
+    document.getElementById("dust").textContent = latest.DustDensity ?? "--";
+    document.getElementById("aqi").textContent = latest.PredictedAQI ?? "--";
+    document.getElementById("category").textContent = latest.Category ?? "--";
+    document.getElementById("advice").textContent = latest.Advice ?? "--";
+    document.getElementById("timestamp").textContent = new Date().toLocaleString();
   }
 });

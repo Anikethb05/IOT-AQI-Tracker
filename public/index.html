@@ -11,22 +11,22 @@
   </head>
   <body>
     <h1>🌫️ IoT Air Quality Monitor</h1>
+
     <div class="data-container">
       <p><strong>Temperature:</strong> <span id="temp">--</span> °C</p>
       <p><strong>Humidity:</strong> <span id="humi">--</span> %</p>
       <p><strong>Dust Density:</strong> <span id="dust">--</span> µg/m³</p>
       <p><strong>Predicted AQI:</strong> <span id="aqi">--</span></p>
+      <p><strong>Category:</strong> <span id="category">--</span></p>
+      <p><strong>Advice:</strong> <span id="advice">--</span></p>
       <p><strong>Last Updated:</strong> <span id="timestamp">--</span></p>
     </div>
 
     <div id="map"></div>
 
-    <!-- Leaflet -->
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     ></script>
-
-    <!-- Firebase + App Script -->
     <script type="module" src="script.js"></script>
   </body>
 </html>
