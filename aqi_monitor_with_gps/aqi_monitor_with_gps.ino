@@ -3,6 +3,7 @@
 #include <HTTPClient.h>
 #include "aqi_model.h"
 #include <FirebaseESP32.h>
+#include <TinyGPSPlus.h>
 
 // --------------------- WiFi Configuration ---------------------
 const char* ssid = "duckietown";
@@ -36,9 +37,15 @@ float dustDensity = 0;
 
 DHT dht22(DHT22_PIN, DHT22);
 
-// --------------------- Dummy GPS Coordinates ---------------------
-float latitude = 12.9716;    // Bangalore
-float longitude = 77.5946;   // Bangalore
+// --------------------- GPS Configuration ---------------------
+#define RXD2 13
+#define TXD2 14
+#define GPS_BAUD 9600
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(2);
+
+float latitude = 0.0;
+float longitude = 0.0;
 
 // --------------------- Timing ---------------------
 unsigned long lastUpdate = 0;
@@ -186,11 +193,90 @@ void sendToFirebase(float temp, float humi, float pollutant, float dust, float a
   }
 }
 
+// --------------------- GPS Display Function ---------------------
+void displayGPSInfo() {
+  Serial.println("\n╔════════════════════════════════════════╗");
+  Serial.println("║          GPS STATUS & DATA              ║");
+  Serial.println("╚════════════════════════════════════════╝");
+  
+  
+  Serial.print("📡 Satellites: ");
+  Serial.print(gps.satellites.value());
+  Serial.print("  |  HDOP: ");
+  Serial.println(gps.hdop.hdop());
+  
+  if (gps.location.isValid()) {
+    latitude = gps.location.lat();
+    longitude = gps.location.lng();
+    
+    Serial.print("✓ Location Valid  |  Lat: ");
+    Serial.print(latitude, 6);
+    Serial.print("  |  Lng: ");
+    Serial.println(longitude, 6);
+    
+    Serial.print("📅 Date: ");
+    if (gps.date.isValid()) {
+      Serial.print(gps.date.month());
+      Serial.print("/");
+      Serial.print(gps.date.day());
+      Serial.print("/");
+      Serial.print(gps.date.year());
+    } else {
+      Serial.print("N/A");
+    }
+    
+    Serial.print("  |  🕐 Time: ");
+    if (gps.time.isValid()) {
+      if (gps.time.hour() < 10) Serial.print("0");
+      Serial.print(gps.time.hour());
+      Serial.print(":");
+      if (gps.time.minute() < 10) Serial.print("0");
+      Serial.print(gps.time.minute());
+      Serial.print(":");
+      if (gps.time.second() < 10) Serial.print("0");
+      Serial.print(gps.time.second());
+    } else {
+      Serial.print("N/A");
+    }
+    Serial.println();
+    
+    Serial.print("🧭 Altitude: ");
+    if (gps.altitude.isValid()) {
+      Serial.print(gps.altitude.meters());
+      Serial.print(" m");
+    } else {
+      Serial.print("N/A");
+    }
+    
+    Serial.print("  |  🚗 Speed: ");
+    if (gps.speed.isValid()) {
+      Serial.print(gps.speed.kmph());
+      Serial.print(" km/h");
+    } else {
+      Serial.print("N/A");
+    }
+    Serial.println();
+    
+  } else {
+    Serial.println("✗ GPS: Waiting for satellite fix...");
+    Serial.print("Chars processed: ");
+    Serial.print(gps.charsProcessed());
+    Serial.print("  |  Sentences with fix: ");
+    Serial.print(gps.sentencesWithFix());
+    Serial.print("  |  Failed checksums: ");
+    Serial.println(gps.failedChecksum());
+  }
+  
+  Serial.println("════════════════════════════════════════");
+}
+
 // --------------------- Setup ---------------------
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   dht22.begin();
   pinMode(ledPower, OUTPUT);
+
+  gpsSerial.begin(GPS_BAUD, SERIAL_8N1, RXD2, TXD2);
 
   Serial.println("\n\n╔════════════════════════════════════════╗");
   Serial.println("║     AQI MONITORING SYSTEM - ESP32       ║");
@@ -199,7 +285,6 @@ void setup() {
 
   connectWiFi();
 
-  // Unique device ID (based on MAC)
   deviceId = WiFi.macAddress();
   deviceId.replace(":", "");
   Serial.print("Device ID: ");
@@ -223,12 +308,18 @@ void setup() {
   Serial.println("✓ DHT22 sensor ready");
   Serial.println("✓ MQ-135 sensor ready");
   Serial.println("✓ Dust sensor ready");
+  Serial.println("✓ GPS module ready");
   Serial.println("✓ AQI Prediction Model loaded\n");
   delay(2000);
 }
 
 // --------------------- Loop ---------------------
 void loop() {
+  // Read GPS continuously to prevent buffer overflow
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+
   digitalWrite(ledPower, LOW);
   delayMicroseconds(samplingTime);
   voMeasured = analogRead(measurePin);
@@ -256,6 +347,8 @@ void loop() {
     Serial.print("Temperature: "); Serial.print(tempC); Serial.print("°C  |  ");
     Serial.print("Pollutant: "); Serial.print(pollutant); Serial.print("  |  ");
     Serial.print("Dust Density: "); Serial.println(dustDensity);
+
+    displayGPSInfo();
 
     float predicted_aqi = predictAQI(humi, tempC, pollutant, dustDensity);
     
@@ -292,21 +385,3 @@ void loop() {
   Serial.println("\n════════════════════════════════════════\n");
   delay(2000);
 }
-
-/*
--------------------------------------------
-TO ENABLE GPS LATER:
--------------------------------------------
-#include <TinyGPS++.h>
-TinyGPSPlus gps;
-HardwareSerial SerialGPS(1);
-SerialGPS.begin(9600, SERIAL_8N1, RXPin, TXPin);
-while (SerialGPS.available() > 0)
-  if (gps.encode(SerialGPS.read())) {
-    if (gps.location.isValid()) {
-      latitude = gps.location.lat();
-      longitude = gps.location.lng();
-    }
-  }
--------------------------------------------
-*/
